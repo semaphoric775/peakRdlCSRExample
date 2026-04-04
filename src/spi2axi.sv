@@ -533,8 +533,8 @@ module synchronizer #(
             s_data_guard_r <= {G_NUM_GUARD_FFS{G_INIT_VALUE}};
 
         end else begin
-            sync_ff : s_data_sync_r <= i_data;
-            guard_ffs : if ($bits(s_data_guard_r) == 1) begin
+            s_data_sync_r <= i_data;
+            if ($bits(s_data_guard_r) == 1) begin
                 s_data_guard_r[0] <= s_data_sync_r; // avoid "Range is empty (null range)" warnings:
             end else begin
                 s_data_guard_r <= { s_data_guard_r[$bits(s_data_guard_r) - 2 : 0], s_data_sync_r};

@@ -7,40 +7,40 @@ package blinky_csr_pkg;
     localparam BLINKY_CSR_MIN_ADDR_WIDTH = 3;
     localparam BLINKY_CSR_SIZE = 'h8;
 
-    typedef struct {
+    typedef struct packed {
         logic next;
         logic we;
     } blinky_csr__led_reg__enable__in_t;
 
-    typedef struct {
+    typedef struct packed {
         logic [30:0] next;
         logic we;
     } blinky_csr__led_reg__scalar__in_t;
 
-    typedef struct {
+    typedef struct packed {
         blinky_csr__led_reg__enable__in_t enable;
         blinky_csr__led_reg__scalar__in_t scalar;
     } blinky_csr__led_reg__in_t;
 
-    typedef struct {
+    typedef struct packed {
         blinky_csr__led_reg__in_t LED1;
         blinky_csr__led_reg__in_t LED2;
     } blinky_csr__in_t;
 
-    typedef struct {
+    typedef struct packed {
         logic value;
     } blinky_csr__led_reg__enable__out_t;
 
-    typedef struct {
+    typedef struct packed {
         logic [30:0] value;
     } blinky_csr__led_reg__scalar__out_t;
 
-    typedef struct {
+    typedef struct packed {
         blinky_csr__led_reg__enable__out_t enable;
         blinky_csr__led_reg__scalar__out_t scalar;
     } blinky_csr__led_reg__out_t;
 
-    typedef struct {
+    typedef struct packed {
         blinky_csr__led_reg__out_t LED1;
         blinky_csr__led_reg__out_t LED2;
     } blinky_csr__out_t;

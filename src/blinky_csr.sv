@@ -204,7 +204,7 @@ module blinky_csr (
     //--------------------------------------------------------------------------
     // Address Decode
     //--------------------------------------------------------------------------
-    typedef struct {
+    typedef struct packed {
         logic LED1;
         logic LED2;
     } decoded_reg_strb_t;
@@ -234,23 +234,23 @@ module blinky_csr (
     //--------------------------------------------------------------------------
     // Field logic
     //--------------------------------------------------------------------------
-    typedef struct {
-        struct {
-            struct {
+    typedef struct packed {
+        struct packed {
+            struct packed {
                 logic next;
                 logic load_next;
             } enable;
-            struct {
+            struct packed {
                 logic [30:0] next;
                 logic load_next;
             } scalar;
         } LED1;
-        struct {
-            struct {
+        struct packed {
+            struct packed {
                 logic next;
                 logic load_next;
             } enable;
-            struct {
+            struct packed {
                 logic [30:0] next;
                 logic load_next;
             } scalar;
@@ -258,20 +258,20 @@ module blinky_csr (
     } field_combo_t;
     field_combo_t field_combo;
 
-    typedef struct {
-        struct {
-            struct {
+    typedef struct packed {
+        struct packed {
+            struct packed {
                 logic value;
             } enable;
-            struct {
+            struct packed {
                 logic [30:0] value;
             } scalar;
         } LED1;
-        struct {
-            struct {
+        struct packed {
+            struct packed {
                 logic value;
             } enable;
-            struct {
+            struct packed {
                 logic [30:0] value;
             } scalar;
         } LED2;
