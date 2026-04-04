@@ -1,0 +1,22 @@
+// Blinky CSR definition
+// Registers for controlling two LED blinkys on an FPGA
+//
+// Each LED register is 32 bits:
+//   bit  [0]    : enable  – 1 = blink, 0 = LED off
+//   bits [31:1] : scalar  – half-period in clock cycles
+
+addrmap blinky_csr {
+    default hw = rw;
+    default sw = rw;
+
+    reg led_reg {
+        default hw = rw;
+        default sw = rw;
+
+        field {we;} enable[1]  = 1'b0;         // bit[0]:    1 = enable blink
+        field {we;} scalar[31] = 31'd25000000;  // bits[31:1]: half-period in clk cycles (default 0.5s @ 50MHz)
+    };
+
+    led_reg LED1 @ 0x00;
+    led_reg LED2 @ 0x04;
+};
