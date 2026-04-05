@@ -7,7 +7,7 @@ module blinky_csr (
 
         output logic s_axil_awready,
         input wire s_axil_awvalid,
-        input wire [2:0] s_axil_awaddr,
+        input wire [3:0] s_axil_awaddr,
         input wire [2:0] s_axil_awprot,
         output logic s_axil_wready,
         input wire s_axil_wvalid,
@@ -18,7 +18,7 @@ module blinky_csr (
         output logic [1:0] s_axil_bresp,
         output logic s_axil_arready,
         input wire s_axil_arvalid,
-        input wire [2:0] s_axil_araddr,
+        input wire [3:0] s_axil_araddr,
         input wire [2:0] s_axil_arprot,
         input wire s_axil_rready,
         output logic s_axil_rvalid,
@@ -34,7 +34,7 @@ module blinky_csr (
     //--------------------------------------------------------------------------
     logic cpuif_req;
     logic cpuif_req_is_wr;
-    logic [2:0] cpuif_addr;
+    logic [3:0] cpuif_addr;
     logic [31:0] cpuif_wr_data;
     logic [31:0] cpuif_wr_biten;
     logic cpuif_req_stall_wr;
@@ -51,10 +51,10 @@ module blinky_csr (
     logic [1:0] axil_n_in_flight;
     logic axil_prev_was_rd;
     logic axil_arvalid;
-    logic [2:0] axil_araddr;
+    logic [3:0] axil_araddr;
     logic axil_ar_accept;
     logic axil_awvalid;
-    logic [2:0] axil_awaddr;
+    logic [3:0] axil_awaddr;
     logic axil_wvalid;
     logic [31:0] axil_wdata;
     logic [3:0] axil_wstrb;
@@ -132,17 +132,17 @@ module blinky_csr (
             if(axil_arvalid && !axil_prev_was_rd) begin
                 cpuif_req = '1;
                 cpuif_req_is_wr = '0;
-                cpuif_addr = {axil_araddr[2:2], 2'b0};
+                cpuif_addr = {axil_araddr[3:2], 2'b0};
                 if(!cpuif_req_stall_rd) axil_ar_accept = '1;
             end else if(axil_awvalid && axil_wvalid) begin
                 cpuif_req = '1;
                 cpuif_req_is_wr = '1;
-                cpuif_addr = {axil_awaddr[2:2], 2'b0};
+                cpuif_addr = {axil_awaddr[3:2], 2'b0};
                 if(!cpuif_req_stall_wr) axil_aw_accept = '1;
             end else if(axil_arvalid) begin
                 cpuif_req = '1;
                 cpuif_req_is_wr = '0;
-                cpuif_addr = {axil_araddr[2:2], 2'b0};
+                cpuif_addr = {axil_araddr[3:2], 2'b0};
                 if(!cpuif_req_stall_rd) axil_ar_accept = '1;
             end
         end
@@ -227,10 +227,11 @@ module blinky_csr (
     typedef struct packed {
         logic LED1;
         logic LED2;
+        logic MAX_PERIOD;
     } decoded_reg_strb_t;
     decoded_reg_strb_t decoded_reg_strb;
     logic decoded_err;
-    logic [2:0] decoded_addr;
+    logic [3:0] decoded_addr;
     logic decoded_req;
     logic decoded_req_is_wr;
     logic [31:0] decoded_wr_data;
@@ -241,8 +242,9 @@ module blinky_csr (
         automatic logic is_valid_rw;
         is_valid_addr = '1; // No valid address check
         is_valid_rw = '1; // No valid RW check
-        decoded_reg_strb.LED1 = cpuif_req_masked & (cpuif_addr == 3'h0);
-        decoded_reg_strb.LED2 = cpuif_req_masked & (cpuif_addr == 3'h4);
+        decoded_reg_strb.LED1 = cpuif_req_masked & (cpuif_addr == 4'h0);
+        decoded_reg_strb.LED2 = cpuif_req_masked & (cpuif_addr == 4'h4);
+        decoded_reg_strb.MAX_PERIOD = cpuif_req_masked & (cpuif_addr == 4'h8) & !cpuif_req_is_wr;
         decoded_err = '0;
     end
 
@@ -277,6 +279,12 @@ module blinky_csr (
                 logic load_next;
             } scalar;
         } LED2;
+        struct packed {
+            struct packed {
+                logic [30:0] next;
+                logic load_next;
+            } max_period;
+        } MAX_PERIOD;
     } field_combo_t;
     field_combo_t field_combo;
 
@@ -297,6 +305,11 @@ module blinky_csr (
                 logic [30:0] value;
             } scalar;
         } LED2;
+        struct packed {
+            struct packed {
+                logic [30:0] value;
+            } max_period;
+        } MAX_PERIOD;
     } field_storage_t;
     field_storage_t field_storage;
 
@@ -404,6 +417,29 @@ module blinky_csr (
         end
     end
     assign hwif_out.LED2.scalar.value = field_storage.LED2.scalar.value;
+    // Field: blinky_csr.MAX_PERIOD.max_period
+    always_comb begin
+        automatic logic [30:0] next_c;
+        automatic logic load_next_c;
+        next_c = field_storage.MAX_PERIOD.max_period.value;
+        load_next_c = '0;
+        
+        // HW Write
+        next_c = hwif_in.MAX_PERIOD.max_period.next;
+        load_next_c = '1;
+        field_combo.MAX_PERIOD.max_period.next = next_c;
+        field_combo.MAX_PERIOD.max_period.load_next = load_next_c;
+    end
+    always_ff @(posedge clk) begin
+        if(rst) begin
+            field_storage.MAX_PERIOD.max_period.value <= 31'h0;
+        end else begin
+            if(field_combo.MAX_PERIOD.max_period.load_next) begin
+                field_storage.MAX_PERIOD.max_period.value <= field_combo.MAX_PERIOD.max_period.next;
+            end
+        end
+    end
+    assign hwif_out.MAX_PERIOD.max_period.value = field_storage.MAX_PERIOD.max_period.value;
 
     //--------------------------------------------------------------------------
     // Write response
@@ -416,7 +452,7 @@ module blinky_csr (
     // Readback
     //--------------------------------------------------------------------------
 
-    logic [2:0] rd_mux_addr;
+    logic [3:0] rd_mux_addr;
     assign rd_mux_addr = decoded_addr;
 
     logic readback_err;
@@ -425,13 +461,16 @@ module blinky_csr (
     always_comb begin
         automatic logic [31:0] readback_data_var;
         readback_data_var = '0;
-        if(rd_mux_addr == 3'h0) begin
+        if(rd_mux_addr == 4'h0) begin
             readback_data_var[0] = field_storage.LED1.enable.value;
             readback_data_var[31:1] = field_storage.LED1.scalar.value;
         end
-        if(rd_mux_addr == 3'h4) begin
+        if(rd_mux_addr == 4'h4) begin
             readback_data_var[0] = field_storage.LED2.enable.value;
             readback_data_var[31:1] = field_storage.LED2.scalar.value;
+        end
+        if(rd_mux_addr == 4'h8) begin
+            readback_data_var[30:0] = field_storage.MAX_PERIOD.max_period.value;
         end
         readback_data = readback_data_var;
         readback_done = decoded_req & ~decoded_req_is_wr;

@@ -4,8 +4,9 @@
 // Hardware interface: hwif_in / hwif_out are purely internal signals
 //
 // Register map:
-//   0x00  LED1  [0]=enable  [31:1]=scalar (half-period, clk cycles)
-//   0x04  LED2  [0]=enable  [31:1]=scalar (half-period, clk cycles)
+//   0x00  LED1        [0]=enable  [31:1]=scalar (half-period, clk cycles)
+//   0x04  LED2        [0]=enable  [31:1]=scalar (half-period, clk cycles)
+//   0x08  MAX_PERIOD  [31:1]=max(LED1.scalar, LED2.scalar)  [RO]
 
 `default_nettype none
 
@@ -27,7 +28,7 @@ module top (
     //--------------------------------------------------------------------------
     // AXI4-Lite interconnect wires (spi2axi -> blinky_csr)
     //--------------------------------------------------------------------------
-    localparam AXI_ADDR_WIDTH = 3;
+    localparam AXI_ADDR_WIDTH = 4;
 
     wire [AXI_ADDR_WIDTH-1:0] axil_awaddr;
     wire [2:0]                axil_awprot;
@@ -59,7 +60,7 @@ module top (
     blinky_csr_pkg::blinky_csr__in_t  hwif_in;
     blinky_csr_pkg::blinky_csr__out_t hwif_out;
 
-    // No external hardware writes; tie all hwif_in fields to 0
+    // No external hardware writes to LED regs; tie all hwif_in fields to 0
     assign hwif_in.LED1.enable.next = 1'b0;
     assign hwif_in.LED1.enable.we   = 1'b0;
     assign hwif_in.LED1.scalar.next = 31'b0;
@@ -69,11 +70,18 @@ module top (
     assign hwif_in.LED2.scalar.next = 31'b0;
     assign hwif_in.LED2.scalar.we   = 1'b0;
 
+    // MAX_PERIOD: combinatorially track the larger of the two LED scalars
+    assign hwif_in.MAX_PERIOD.max_period.next =
+        (hwif_out.LED1.scalar.value >= hwif_out.LED2.scalar.value)
+            ? hwif_out.LED1.scalar.value
+            : hwif_out.LED2.scalar.value;
+
     // Internal aliases for hierarchical probing in simulation
-    wire        hwif_out_LED1_enable_value = hwif_out.LED1.enable.value;
-    wire [30:0] hwif_out_LED1_scalar_value = hwif_out.LED1.scalar.value;
-    wire        hwif_out_LED2_enable_value = hwif_out.LED2.enable.value;
-    wire [30:0] hwif_out_LED2_scalar_value = hwif_out.LED2.scalar.value;
+    wire        hwif_out_LED1_enable_value      = hwif_out.LED1.enable.value;
+    wire [30:0] hwif_out_LED1_scalar_value      = hwif_out.LED1.scalar.value;
+    wire        hwif_out_LED2_enable_value      = hwif_out.LED2.enable.value;
+    wire [30:0] hwif_out_LED2_scalar_value      = hwif_out.LED2.scalar.value;
+    wire [30:0] hwif_out_MAX_PERIOD_value       = hwif_out.MAX_PERIOD.max_period.value;
 
     //--------------------------------------------------------------------------
     // SPI to AXI4-Lite bridge

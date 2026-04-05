@@ -4,8 +4,8 @@
 package blinky_csr_pkg;
 
     localparam BLINKY_CSR_DATA_WIDTH = 32;
-    localparam BLINKY_CSR_MIN_ADDR_WIDTH = 3;
-    localparam BLINKY_CSR_SIZE = 'h8;
+    localparam BLINKY_CSR_MIN_ADDR_WIDTH = 4;
+    localparam BLINKY_CSR_SIZE = 'hc;
 
     typedef struct packed {
         logic next;
@@ -23,8 +23,17 @@ package blinky_csr_pkg;
     } blinky_csr__led_reg__in_t;
 
     typedef struct packed {
+        logic [30:0] next;
+    } blinky_csr__max_period_reg__max_period__in_t;
+
+    typedef struct packed {
+        blinky_csr__max_period_reg__max_period__in_t max_period;
+    } blinky_csr__max_period_reg__in_t;
+
+    typedef struct packed {
         blinky_csr__led_reg__in_t LED1;
         blinky_csr__led_reg__in_t LED2;
+        blinky_csr__max_period_reg__in_t MAX_PERIOD;
     } blinky_csr__in_t;
 
     typedef struct packed {
@@ -41,7 +50,16 @@ package blinky_csr_pkg;
     } blinky_csr__led_reg__out_t;
 
     typedef struct packed {
+        logic [30:0] value;
+    } blinky_csr__max_period_reg__max_period__out_t;
+
+    typedef struct packed {
+        blinky_csr__max_period_reg__max_period__out_t max_period;
+    } blinky_csr__max_period_reg__out_t;
+
+    typedef struct packed {
         blinky_csr__led_reg__out_t LED1;
         blinky_csr__led_reg__out_t LED2;
+        blinky_csr__max_period_reg__out_t MAX_PERIOD;
     } blinky_csr__out_t;
 endpackage

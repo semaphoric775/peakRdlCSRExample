@@ -19,4 +19,13 @@ addrmap blinky_csr {
 
     led_reg LED1 @ 0x00;
     led_reg LED2 @ 0x04;
+
+    reg max_period_reg {
+        default hw = rw;
+        default sw = r;
+
+        field {} max_period[31] = 31'd0;  // max half-period across LED1 and LED2 (hw-driven)
+    };
+
+    max_period_reg MAX_PERIOD @ 0x08;
 };

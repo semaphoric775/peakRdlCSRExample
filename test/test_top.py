@@ -11,8 +11,9 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, Timer
 
-LED1_ADDR = 0x00000000
-LED2_ADDR = 0x00000004
+LED1_ADDR       = 0x00000000
+LED2_ADDR       = 0x00000004
+MAX_PERIOD_ADDR = 0x00000008
 
 CMD_WRITE       = 0x00
 CMD_READ        = 0x01
@@ -197,6 +198,49 @@ async def test_led1_write_then_blink(dut):
         await RisingEdge(dut.clk)
         cycles_high += 1
     assert cycles_high == scalar, f"LED1 half-period: expected {scalar}, got {cycles_high}"
+
+
+@cocotb.test()
+async def test_max_period_reflects_larger_scalar(dut):
+    """MAX_PERIOD register tracks max(LED1.scalar, LED2.scalar) in hardware.
+
+    Note: verified via hwif_out probe rather than SPI readback. spi2axi has a
+    known issue where blocking-then-NBA assignment in SPI_LOAD_TX_BYTE always
+    drives spi_tx_shreg to 0, causing all SPI reads to return 0x00000000.
+    All other tests in this file use the same hwif_out probe strategy.
+    """
+    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    await reset(dut)
+
+    # LED1 larger
+    scalar1, scalar2 = 30, 10
+    await spi_write(dut, LED1_ADDR, pack_led_reg(enable=1, scalar=scalar1))
+    await spi_write(dut, LED2_ADDR, pack_led_reg(enable=1, scalar=scalar2))
+    await ClockCycles(dut.clk, 4)
+
+    hw_max = int(dut.hwif_out_MAX_PERIOD_value.value)
+    cocotb.log.info(f"scalar1={scalar1} scalar2={scalar2} hw_max={hw_max}")
+    assert hw_max == scalar1, f"MAX_PERIOD expected {scalar1}, got {hw_max}"
+
+    # LED2 larger
+    scalar1, scalar2 = 5, 40
+    await spi_write(dut, LED1_ADDR, pack_led_reg(enable=1, scalar=scalar1))
+    await spi_write(dut, LED2_ADDR, pack_led_reg(enable=1, scalar=scalar2))
+    await ClockCycles(dut.clk, 4)
+
+    hw_max = int(dut.hwif_out_MAX_PERIOD_value.value)
+    cocotb.log.info(f"scalar1={scalar1} scalar2={scalar2} hw_max={hw_max}")
+    assert hw_max == scalar2, f"MAX_PERIOD expected {scalar2}, got {hw_max}"
+
+    # Equal scalars
+    scalar1 = scalar2 = 20
+    await spi_write(dut, LED1_ADDR, pack_led_reg(enable=1, scalar=scalar1))
+    await spi_write(dut, LED2_ADDR, pack_led_reg(enable=1, scalar=scalar2))
+    await ClockCycles(dut.clk, 4)
+
+    hw_max = int(dut.hwif_out_MAX_PERIOD_value.value)
+    cocotb.log.info(f"scalar1={scalar1} scalar2={scalar2} hw_max={hw_max}")
+    assert hw_max == scalar1, f"MAX_PERIOD expected {scalar1}, got {hw_max}"
 
 
 @cocotb.test()
