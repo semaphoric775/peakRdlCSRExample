@@ -150,45 +150,65 @@ module blinky_csr (
 
 
     // AXI4-Lite Response Logic
-    // Single-register response holder (replaces struct array for Verilator compat)
-    logic        resp_pending;
-    logic        resp_is_wr;
-    logic        resp_err;
-    logic [31:0] resp_rdata;
+    logic axil_resp_buffer_is_wr[2];
+    logic axil_resp_buffer_err[2];
+    logic [31:0] axil_resp_buffer_rdata[2];
+
+    logic [1:0] axil_resp_wptr;
+    logic [1:0] axil_resp_rptr;
 
     always_ff @(posedge clk) begin
         if(rst) begin
-            resp_pending <= '0;
-            resp_is_wr   <= '0;
-            resp_err     <= '0;
-            resp_rdata   <= '0;
+            for(int i=0; i<2; i++) begin
+                axil_resp_buffer_is_wr[i] <= '0;
+                axil_resp_buffer_err[i] <= '0;
+                axil_resp_buffer_rdata[i] <= '0;
+            end
+            axil_resp_wptr <= '0;
+            axil_resp_rptr <= '0;
         end else begin
+            // Store responses in buffer until AXI response channel accepts them
             if(cpuif_rd_ack || cpuif_wr_ack) begin
-                resp_pending <= '1;
-                resp_is_wr   <= cpuif_wr_ack;
-                resp_err     <= cpuif_wr_ack ? cpuif_wr_err : cpuif_rd_err;
-                resp_rdata   <= cpuif_rd_data;
-            end else if(axil_resp_acked) begin
-                resp_pending <= '0;
+                if(cpuif_rd_ack) begin
+                    axil_resp_buffer_is_wr[axil_resp_wptr[0:0]] <= '0;
+                    axil_resp_buffer_err[axil_resp_wptr[0:0]] <= cpuif_rd_err;
+                    axil_resp_buffer_rdata[axil_resp_wptr[0:0]] <= cpuif_rd_data;
+
+                end else if(cpuif_wr_ack) begin
+                    axil_resp_buffer_is_wr[axil_resp_wptr[0:0]] <= '1;
+                    axil_resp_buffer_err[axil_resp_wptr[0:0]] <= cpuif_wr_err;
+                end
+                axil_resp_wptr <= axil_resp_wptr + 1'b1;
+            end
+
+            // Advance read pointer when acknowledged
+            if(axil_resp_acked) begin
+                axil_resp_rptr <= axil_resp_rptr + 1'b1;
             end
         end
     end
 
     always_comb begin
         axil_resp_acked = '0;
-        s_axil_bvalid   = '0;
-        s_axil_rvalid   = '0;
-        s_axil_rdata    = resp_rdata;
-        s_axil_bresp    = resp_err ? 2'b10 : 2'b00;
-        s_axil_rresp    = resp_err ? 2'b10 : 2'b00;
-        if(resp_pending) begin
-            if(resp_is_wr) begin
+        s_axil_bvalid = '0;
+        s_axil_rvalid = '0;
+        if(axil_resp_rptr != axil_resp_wptr) begin
+            if(axil_resp_buffer_is_wr[axil_resp_rptr[0:0]]) begin
                 s_axil_bvalid = '1;
                 if(s_axil_bready) axil_resp_acked = '1;
             end else begin
                 s_axil_rvalid = '1;
                 if(s_axil_rready) axil_resp_acked = '1;
             end
+        end
+
+        s_axil_rdata = axil_resp_buffer_rdata[axil_resp_rptr[0:0]];
+        if(axil_resp_buffer_err[axil_resp_rptr[0:0]]) begin
+            s_axil_bresp = 2'b10;
+            s_axil_rresp = 2'b10;
+        end else begin
+            s_axil_bresp = 2'b00;
+            s_axil_rresp = 2'b00;
         end
     end
 
@@ -210,6 +230,7 @@ module blinky_csr (
     } decoded_reg_strb_t;
     decoded_reg_strb_t decoded_reg_strb;
     logic decoded_err;
+    logic [2:0] decoded_addr;
     logic decoded_req;
     logic decoded_req_is_wr;
     logic [31:0] decoded_wr_data;
@@ -217,15 +238,16 @@ module blinky_csr (
 
     always_comb begin
         automatic logic is_valid_addr;
-        automatic logic is_invalid_rw;
-        is_valid_addr = '1; // No error checking on valid address access
-        is_invalid_rw = '0;
+        automatic logic is_valid_rw;
+        is_valid_addr = '1; // No valid address check
+        is_valid_rw = '1; // No valid RW check
         decoded_reg_strb.LED1 = cpuif_req_masked & (cpuif_addr == 3'h0);
         decoded_reg_strb.LED2 = cpuif_req_masked & (cpuif_addr == 3'h4);
-        decoded_err = (~is_valid_addr | is_invalid_rw) & decoded_req;
+        decoded_err = '0;
     end
 
     // Pass down signals to next stage
+    assign decoded_addr = cpuif_addr;
     assign decoded_req = cpuif_req_masked;
     assign decoded_req_is_wr = cpuif_req_is_wr;
     assign decoded_wr_data = cpuif_wr_data;
@@ -394,25 +416,26 @@ module blinky_csr (
     // Readback
     //--------------------------------------------------------------------------
 
+    logic [2:0] rd_mux_addr;
+    assign rd_mux_addr = decoded_addr;
+
     logic readback_err;
     logic readback_done;
     logic [31:0] readback_data;
-
-    // Assign readback values to a flattened array
-    logic [31:0] readback_array[2];
-    assign readback_array[0][0:0] = (decoded_reg_strb.LED1 && !decoded_req_is_wr) ? field_storage.LED1.enable.value : '0;
-    assign readback_array[0][31:1] = (decoded_reg_strb.LED1 && !decoded_req_is_wr) ? field_storage.LED1.scalar.value : '0;
-    assign readback_array[1][0:0] = (decoded_reg_strb.LED2 && !decoded_req_is_wr) ? field_storage.LED2.enable.value : '0;
-    assign readback_array[1][31:1] = (decoded_reg_strb.LED2 && !decoded_req_is_wr) ? field_storage.LED2.scalar.value : '0;
-
-    // Reduce the array
     always_comb begin
         automatic logic [31:0] readback_data_var;
+        readback_data_var = '0;
+        if(rd_mux_addr == 3'h0) begin
+            readback_data_var[0] = field_storage.LED1.enable.value;
+            readback_data_var[31:1] = field_storage.LED1.scalar.value;
+        end
+        if(rd_mux_addr == 3'h4) begin
+            readback_data_var[0] = field_storage.LED2.enable.value;
+            readback_data_var[31:1] = field_storage.LED2.scalar.value;
+        end
+        readback_data = readback_data_var;
         readback_done = decoded_req & ~decoded_req_is_wr;
         readback_err = '0;
-        readback_data_var = '0;
-        for(int i=0; i<2; i++) readback_data_var |= readback_array[i];
-        readback_data = readback_data_var;
     end
 
     assign cpuif_rd_ack = readback_done;
